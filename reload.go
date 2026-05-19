@@ -5,7 +5,6 @@ import (
 	"log"
 	"net/url"
 	"os"
-	"sync/atomic"
 )
 
 type ProxyConfig struct {
