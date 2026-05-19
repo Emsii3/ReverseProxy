@@ -1,0 +1,9 @@
+{
+  "load_balancer": {
+    "backends": ["http://localhost:8080", "http://localhost:8082"]
+  },
+  "cache_rules": {
+    "/test": true
+  },
+  "rate_limit_max": 200
+}

@@ -75,15 +75,33 @@ func cacheMiddleware(next http.Handler, cache *sync.Map, cacheable map[string]bo
 }
 
 func main() {
-	cache := new(sync.Map) // cache
-	backends := []string{"http://localhost:8080", "http://localhost:8082", "http://localhost:8083"}
-	visitors := new(sync.Map) // rate limiter clearing
+	configPath := "config.json"
+	cache := new(sync.Map)                        // cache
+	backends := []string{"http://localhost:8080"} //, "http://localhost:8082", "http://	localhost:8083"}
+	visitors := new(sync.Map)                     // rate limiter clearing
+	var currentConfig atomic.Pointer[ProxyConfig]
+	loadConfig(configPath, &currentConfig) // load config once on start
+	go func() {
+		fileinfo, _ := os.Stat(configPath)
+		lastMod := fileinfo.ModTime()
+		for {
+			time.Sleep(time.Second * 5)
+			config := reloadConfig(configPath, lastMod)
+			if config != nil {
+				currentConfig.Store(config)
+				fileinfo, _ = os.Stat(configPath)
+				lastMod = fileinfo.ModTime()
+			}
+
+		}
+	}() // reload config every 5 seconds
+
 	go func() {
 		for {
 			time.Sleep(time.Second * 3)
 			visitors.Clear()
 		}
-	}()
+	}() // rate limiter reset
 
 	var isAlive atomic.Bool // HEALTHCHECK
 	go func() {
@@ -106,7 +124,7 @@ func main() {
 			})
 		}
 	}() // cache clearing
-	requestsToCache := make(map[string]bool)
+	requestsToCache := make(map[string]bool) // check what requests should be cached
 	file, err := os.Open("toBeCached.txt")
 	if err != nil {
 		log.Fatal(err)
@@ -152,6 +170,4 @@ func main() {
 	println("Magia")
 	http.Handle("/", checkHealth(rateLimit(cacheMiddleware(proxy, cache, requestsToCache), visitors), &isAlive))
 	http.ListenAndServe(":8081", nil)
-
-	print("done")
 }
