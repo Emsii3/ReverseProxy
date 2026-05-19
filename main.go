@@ -1,20 +1,19 @@
 package main
 
 import (
-	"bufio"
-	"log"
 	"net"
 	"net/http"
 	"net/http/httputil"
-	"net/url"
 	"os"
 	"sync"
 	"sync/atomic"
 	"time"
 )
 
-func rateLimit(next http.Handler, visitors *sync.Map) http.Handler {
+func rateLimit(next http.Handler, visitors *sync.Map, config *atomic.Pointer[ProxyConfig]) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		cfg := config.Load()
+		rateLimitMax := int64(cfg.RateLimitMax)
 		ip, _, err := net.SplitHostPort(r.RemoteAddr)
 		var timesVisited = new(atomic.Int64)
 		if err != nil {
@@ -24,7 +23,7 @@ func rateLimit(next http.Handler, visitors *sync.Map) http.Handler {
 		val, _ := visitors.LoadOrStore(ip, timesVisited)
 		timesVisitedFromMap := val.(*atomic.Int64)
 		currentVal := timesVisitedFromMap.Add(1)
-		if currentVal > 100 {
+		if currentVal > rateLimitMax {
 			http.Error(w, "Too many requests", 429)
 			return
 		}
@@ -40,9 +39,10 @@ func checkHealth(next http.Handler, isAlive *atomic.Bool) http.Handler {
 		next.ServeHTTP(w, r)
 	})
 }
-func cacheMiddleware(next http.Handler, cache *sync.Map, cacheable map[string]bool) http.Handler {
+func cacheMiddleware(next http.Handler, cache *sync.Map, config *atomic.Pointer[ProxyConfig]) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		//check if cacheable
+		cfg := config.Load()
+		cacheable := cfg.CacheRules
 		if allowCache, exists := cacheable[r.URL.Path]; !exists || !allowCache {
 			next.ServeHTTP(w, r)
 			return
@@ -76,23 +76,25 @@ func cacheMiddleware(next http.Handler, cache *sync.Map, cacheable map[string]bo
 
 func main() {
 	configPath := "config.json"
-	cache := new(sync.Map)                        // cache
-	backends := []string{"http://localhost:8080"} //, "http://localhost:8082", "http://	localhost:8083"}
-	visitors := new(sync.Map)                     // rate limiter clearing
+	cache := new(sync.Map)    // cache
+	visitors := new(sync.Map) // rate limiter clearing
 	var currentConfig atomic.Pointer[ProxyConfig]
 	loadConfig(configPath, &currentConfig) // load config once on start
+	cfg := currentConfig.Load()
 	go func() {
 		fileinfo, _ := os.Stat(configPath)
 		lastMod := fileinfo.ModTime()
 		for {
 			time.Sleep(time.Second * 5)
-			config := reloadConfig(configPath, lastMod)
-			if config != nil {
-				currentConfig.Store(config)
-				fileinfo, _ = os.Stat(configPath)
-				lastMod = fileinfo.ModTime()
-			}
+			fileinfo, err := os.Stat(configPath)
+			if err == nil && fileinfo.ModTime().After(lastMod) {
+				config := reloadConfig(configPath)
+				if config != nil && len(config.Backends) > 0 {
+					currentConfig.Store(config)
+					lastMod = fileinfo.ModTime()
+				}
 
+			}
 		}
 	}() // reload config every 5 seconds
 
@@ -103,12 +105,22 @@ func main() {
 		}
 	}() // rate limiter reset
 
-	var isAlive atomic.Bool // HEALTHCHECK
+	var isAlive atomic.Bool // healthcheck
 	go func() {
 		for {
-			_, err := http.Get(backends[0] + "/test")
-			isAlive.Store(err == nil)
-			time.Sleep(time.Minute * 1)
+			cfg := currentConfig.Load()
+			if len(cfg.Backends) > 0 {
+
+				body, err := http.Get(cfg.Backends[0] + "/test")
+				isAlive.Store(err == nil)
+				if err == nil {
+					body.Body.Close()
+				}
+				time.Sleep(time.Second * 10)
+			} else {
+				isAlive.Store(false)
+				time.Sleep(time.Second * 10)
+			}
 		}
 	}()
 
@@ -124,33 +136,10 @@ func main() {
 			})
 		}
 	}() // cache clearing
-	requestsToCache := make(map[string]bool) // check what requests should be cached
-	file, err := os.Open("toBeCached.txt")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer file.Close()
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		requestsToCache[scanner.Text()] = true
-	}
-	file.Close()
-	if err := scanner.Err(); err != nil {
-		log.Fatal(err)
-	}
 
-	parsedURLs := make([]*url.URL, len(backends))
-	for i, raw := range backends {
-		parsedURLs[i], err = url.Parse(raw)
-		if err != nil {
-			log.Fatal(err)
-		}
-	}
-
-	var backendToChoose atomic.Int64
-	proxy := httputil.NewSingleHostReverseProxy(parsedURLs[0])
+	var backendToChoose atomic.Uint64
+	proxy := httputil.NewSingleHostReverseProxy(cfg.parsedURLs[0]) // this should be placed elsewhere
 	originalDirector := proxy.Director
-	numberOfBackends := len(backends) // caching this to improve speed
 	proxy.Director = func(req *http.Request) {
 		originalDirector(req)
 		// adding headers
@@ -160,14 +149,20 @@ func main() {
 		req.Header.Set("X-Real-IP", req.RemoteAddr)
 
 		//load balancer using round-robin
+		tempCfg := currentConfig.Load()
 		count := backendToChoose.Add(1)
-		idx := int(count % int64(numberOfBackends))
-		target := parsedURLs[idx]
+		var idx int
+		if int64(len(tempCfg.parsedURLs)) > 0 {
+			idx = int(int64(count) % int64(len(tempCfg.parsedURLs)))
+		} else {
+			return
+		}
+		target := tempCfg.parsedURLs[idx]
 		req.URL.Scheme = target.Scheme
 		req.URL.Host = target.Host
 	}
 
 	println("Magia")
-	http.Handle("/", checkHealth(rateLimit(cacheMiddleware(proxy, cache, requestsToCache), visitors), &isAlive))
+	http.Handle("/", checkHealth(rateLimit(cacheMiddleware(proxy, cache, &currentConfig), visitors, &currentConfig), &isAlive))
 	http.ListenAndServe(":8081", nil)
 }
