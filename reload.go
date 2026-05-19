@@ -36,32 +36,9 @@ func reloadConfig(filename string) *ProxyConfig {
 		}
 	}
 	if len(config.Backends) == 0 {
-		println("Error, config.json has no proper backends")
+		log.Println("Error, config.json has no proper backends")
 		return nil
 	}
 	config.parsedURLs = parsedURLs
 	return config
-}
-
-func loadConfig(filename string, config *atomic.Pointer[ProxyConfig]) {
-	buff, err := os.ReadFile(filename)
-	if err != nil {
-		log.Fatal(err)
-	}
-	var configToLoad ProxyConfig
-	err = json.Unmarshal(buff, &configToLoad)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	parsedURLs := make([]*url.URL, len(configToLoad.Backends))
-	for i, raw := range configToLoad.Backends {
-		parsedURLs[i], err = url.Parse(raw)
-		if err != nil {
-			log.Fatal(err)
-		}
-	}
-	configToLoad.parsedURLs = parsedURLs
-
-	config.Store(&configToLoad)
 }

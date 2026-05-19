@@ -79,7 +79,7 @@ func main() {
 	cache := new(sync.Map)    // cache
 	visitors := new(sync.Map) // rate limiter clearing
 	var currentConfig atomic.Pointer[ProxyConfig]
-	loadConfig(configPath, &currentConfig) // load config once on start
+	currentConfig.Store(reloadConfig(configPath))
 	cfg := currentConfig.Load()
 	go func() {
 		fileinfo, _ := os.Stat(configPath)
