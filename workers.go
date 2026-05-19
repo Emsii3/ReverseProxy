@@ -12,7 +12,6 @@ func startHealthCheck(currentConfig *atomic.Pointer[ProxyConfig], isAlive *atomi
 	for {
 		cfg := currentConfig.Load()
 		if len(cfg.Backends) > 0 {
-
 			body, err := http.Get(cfg.Backends[0] + "/test")
 			isAlive.Store(err == nil)
 			if err == nil {
