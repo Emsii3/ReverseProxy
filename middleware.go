@@ -48,13 +48,13 @@ func cacheMiddleware(next http.Handler, cache *sync.Map, config *atomic.Pointer[
 		//cacheing
 		key := r.Method + ":" + r.URL.String()
 		if val, ok := cache.Load(key); ok == true {
-			box := val.(CachedResponse)
-			for k, v := range box.Headers {
+			entry := val.(CachedResponse)
+			for k, v := range entry.Headers {
 				w.Header()[k] = v
 			}
-			w.WriteHeader(box.StatusCode)
-			w.Write(box.Body)
-			if time.Now().After(box.ExpiresAt) {
+			w.WriteHeader(entry.StatusCode)
+			w.Write(entry.Body)
+			if time.Now().After(entry.ExpiresAt) {
 				cache.Delete(key)
 			}
 			return

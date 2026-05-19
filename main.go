@@ -16,16 +16,16 @@ func main() {
 	cfg := currentConfig.Load()
 	var isAlive atomic.Bool
 
-	go startHotReloading(configPath, &currentConfig) // reload config every 5 seconds
-	go startRateLimit(visitors)                      // rate limiter reset
-	go startHealthCheck(&currentConfig, &isAlive)
-	go startClearingCache(cache) // cache clearing
+	go startConfigWatcher(configPath, &currentConfig) // reload config every 5 seconds
+	go startVisitorCleaner(visitors)                  // rate limiter reset
+	go startHealthCheck(&currentConfig, &isAlive)     // check if services are alive
+	go startCacheCleaner(cache)                       // cache clearing
 
-	var backendToChoose atomic.Uint64
+	var roundRobinCounter atomic.Uint64
 	proxy := httputil.NewSingleHostReverseProxy(cfg.parsedURLs[0]) // this is fine only because director is choosing correct adress to sent requests to. This line is here only to create reverseproxy.
 	myDirector := customDirector{
 		originalDirector: proxy.Director,
-		backendCounter:   &backendToChoose,
+		backendCounter:   &roundRobinCounter,
 		currentConfig:    &currentConfig,
 	}
 	proxy.Director = myDirector.Direct

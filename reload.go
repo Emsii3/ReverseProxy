@@ -31,7 +31,8 @@ func reloadConfig(filename string) *ProxyConfig {
 	for i, raw := range config.Backends {
 		parsedURLs[i], err = url.Parse(raw)
 		if err != nil {
-			log.Fatal(err)
+			log.Println(err)
+			return nil
 		}
 	}
 	if len(config.Backends) == 0 {

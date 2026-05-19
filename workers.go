@@ -25,7 +25,7 @@ func startHealthCheck(currentConfig *atomic.Pointer[ProxyConfig], isAlive *atomi
 		}
 	}
 }
-func startHotReloading(configPath string, currentConfig *atomic.Pointer[ProxyConfig]) {
+func startConfigWatcher(configPath string, currentConfig *atomic.Pointer[ProxyConfig]) {
 	fileinfo, _ := os.Stat(configPath)
 	lastMod := fileinfo.ModTime()
 	for {
@@ -41,18 +41,18 @@ func startHotReloading(configPath string, currentConfig *atomic.Pointer[ProxyCon
 		}
 	}
 }
-func startRateLimit(visitors *sync.Map) {
+func startVisitorCleaner(visitors *sync.Map) {
 	for {
 		time.Sleep(time.Second * 3)
 		visitors.Clear()
 	}
 }
-func startClearingCache(cache *sync.Map) {
+func startCacheCleaner(cache *sync.Map) {
 	for {
 		time.Sleep(time.Minute * 10)
 		cache.Range(func(k, v any) bool {
-			box := v.(CachedResponse)
-			if time.Now().After(box.ExpiresAt) {
+			entry := v.(CachedResponse)
+			if time.Now().After(entry.ExpiresAt) {
 				cache.Delete(k)
 			}
 			return true
