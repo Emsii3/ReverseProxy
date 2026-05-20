@@ -3,6 +3,7 @@ package main
 import (
 	"net"
 	"net/http"
+	"net/url"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -28,9 +29,10 @@ func rateLimit(next http.Handler, visitors *sync.Map, config *atomic.Pointer[Pro
 		next.ServeHTTP(w, r)
 	})
 }
-func checkHealth(next http.Handler, isAlive *atomic.Bool) http.Handler {
+func checkHealth(next http.Handler, aliveBackends *atomic.Pointer[[]*url.URL]) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if isAlive.Load() == false {
+		backends := aliveBackends.Load()
+		if backends == nil || len(*backends) == 0 {
 			http.Error(w, "The server was acting as a gateway or proxy and did not receive a timely response from the upstream server.", 504)
 			return
 		}
