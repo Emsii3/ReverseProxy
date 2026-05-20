@@ -47,7 +47,8 @@ The proxy requires a `config.json` file in the root directory. This file is moni
     "/test": true
   },
   "rate_limit_max": 50
-}```
+}
+```
 
 ### Compilation
 
