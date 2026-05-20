@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -11,9 +12,10 @@ import (
 )
 
 func BenchmarkCheckHealth_Alive(b *testing.B) {
-	var isAlive atomic.Bool
-	isAlive.Store(true)
-	handler := checkHealth(okHandler(), &isAlive)
+	var aliveBackends atomic.Pointer[[]*url.URL]
+	mockURLs := []*url.URL{{Scheme: "http", Host: "localhost:8080"}}
+	aliveBackends.Store(&mockURLs)
+	handler := checkHealth(okHandler(), &aliveBackends)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -130,10 +132,11 @@ func BenchmarkFullChain_CacheHit(b *testing.B) {
 	cache := new(sync.Map)
 	visitors := new(sync.Map)
 	config := makeConfig(1<<31, map[string]bool{"/cached": true})
-	var isAlive atomic.Bool
-	isAlive.Store(true)
+	var aliveBackends atomic.Pointer[[]*url.URL]
+	mockURLs := []*url.URL{{Scheme: "http", Host: "localhost:8080"}}
+	aliveBackends.Store(&mockURLs)
 
-	handler := checkHealth(rateLimit(cacheMiddleware(okHandler(), cache, config), visitors, config), &isAlive)
+	handler := checkHealth(rateLimit(cacheMiddleware(okHandler(), cache, config), visitors, config), &aliveBackends)
 
 	req := httptest.NewRequest(http.MethodGet, "/cached", nil)
 	req.RemoteAddr = "127.0.0.1:1234"
@@ -154,13 +157,14 @@ func BenchmarkFullChain_CacheHit(b *testing.B) {
 func BenchmarkFullChain_CacheMiss(b *testing.B) {
 	visitors := new(sync.Map)
 	config := makeConfig(1<<31, map[string]bool{"/cached": true})
-	var isAlive atomic.Bool
-	isAlive.Store(true)
+	var aliveBackends atomic.Pointer[[]*url.URL]
+	mockURLs := []*url.URL{{Scheme: "http", Host: "localhost:8080"}}
+	aliveBackends.Store(&mockURLs)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		cache := new(sync.Map)
-		handler := checkHealth(rateLimit(cacheMiddleware(okHandler(), cache, config), visitors, config), &isAlive)
+		handler := checkHealth(rateLimit(cacheMiddleware(okHandler(), cache, config), visitors, config), &aliveBackends)
 		req := httptest.NewRequest(http.MethodGet, "/cached", nil)
 		req.RemoteAddr = "127.0.0.1:1234"
 		rr := httptest.NewRecorder()

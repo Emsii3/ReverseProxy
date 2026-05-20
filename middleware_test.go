@@ -3,6 +3,7 @@ package main
 import (
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -28,12 +29,13 @@ func okHandler() http.Handler {
 // checkHealth
 
 func TestCheckHealth_Alive(t *testing.T) {
-	var isAlive atomic.Bool
-	isAlive.Store(true)
+	var aliveBackends atomic.Pointer[[]*url.URL]
+	mockURLs := []*url.URL{{Scheme: "http", Host: "localhost:8080"}}
+	aliveBackends.Store(&mockURLs)
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rr := httptest.NewRecorder()
-	checkHealth(okHandler(), &isAlive).ServeHTTP(rr, req)
+	checkHealth(okHandler(), &aliveBackends).ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
@@ -41,12 +43,12 @@ func TestCheckHealth_Alive(t *testing.T) {
 }
 
 func TestCheckHealth_Dead(t *testing.T) {
-	var isAlive atomic.Bool
-	isAlive.Store(false)
+	var deadBackends atomic.Pointer[[]*url.URL]
+	// Zostawiamy domyślny nil - symuluje całkowity brak wczytanej puli z workerów
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rr := httptest.NewRecorder()
-	checkHealth(okHandler(), &isAlive).ServeHTTP(rr, req)
+	checkHealth(okHandler(), &deadBackends).ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusGatewayTimeout {
 		t.Fatalf("expected 504, got %d", rr.Code)
