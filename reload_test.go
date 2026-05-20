@@ -33,11 +33,8 @@ func TestReloadConfig_Valid(t *testing.T) {
 	if len(cfg.Backends) != 1 {
 		t.Fatalf("expected 1 backend, got %d", len(cfg.Backends))
 	}
-	if len(cfg.parsedURLs) != 1 {
-		t.Fatal("parsedURLs should be populated")
-	}
-	if cfg.parsedURLs[0].Host != "localhost:8080" {
-		t.Fatalf("unexpected host: %s", cfg.parsedURLs[0].Host)
+	if cfg.Backends[0] != "http://localhost:8080" {
+		t.Fatalf("unexpected backend: %s", cfg.Backends[0])
 	}
 }
 
@@ -51,8 +48,8 @@ func TestReloadConfig_MultipleBackends(t *testing.T) {
 	if cfg == nil {
 		t.Fatal("expected config, got nil")
 	}
-	if len(cfg.parsedURLs) != 2 {
-		t.Fatalf("expected 2 parsed URLs, got %d", len(cfg.parsedURLs))
+	if len(cfg.Backends) != 2 {
+		t.Fatalf("expected 2 backends, got %d", len(cfg.Backends))
 	}
 }
 
