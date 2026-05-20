@@ -16,9 +16,12 @@ func main() {
 	visitors := new(sync.Map) // rate limiter clearing
 	var currentConfig atomic.Pointer[ProxyConfig]
 	currentConfig.Store(reloadConfig(configPath))
-	cfg := currentConfig.Load()
 	var roundRobinCounter atomic.Uint64
 	var aliveBackends atomic.Pointer[[]*url.URL]
+	dummyHost := url.URL{
+		Scheme: "http",
+		Host:   "localhost",
+	}
 
 	// start workers
 	go startConfigWatcher(configPath, &currentConfig)   // reload config every 5 seconds
@@ -26,8 +29,7 @@ func main() {
 	go startHealthCheck(&currentConfig, &aliveBackends) // check if services are alive
 	go startCacheCleaner(cache)                         // cache clearing
 
-	// start services
-	proxy := httputil.NewSingleHostReverseProxy(cfg.parsedURLs[0]) // this is fine only because director is choosing correct adress to sent requests to. This line is here only to create reverseproxy.
+	proxy := httputil.NewSingleHostReverseProxy(&dummyHost) // this is fine only because director is choosing correct adress to sent requests to. This line is here only to create reverseproxy.
 	myDirector := customDirector{
 		originalDirector: proxy.Director,
 		backendCounter:   &roundRobinCounter,
