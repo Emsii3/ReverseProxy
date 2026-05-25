@@ -35,6 +35,13 @@ func main() {
 		backendCounter:   &roundRobinCounter,
 		aliveBackends:    &aliveBackends,
 	}
+
+	myTransport := http.DefaultTransport.(*http.Transport).Clone()
+	myTransport.MaxConnsPerHost = 150
+	myTransport.MaxIdleConnsPerHost = 150
+
+	proxy.Transport = myTransport
+
 	proxy.Director = myDirector.Direct
 	log.Println("Initialization successful")
 	http.Handle("/", checkHealth(rateLimit(cacheMiddleware(proxy, cache, &currentConfig), visitors, &currentConfig), &aliveBackends))
