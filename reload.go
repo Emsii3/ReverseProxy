@@ -16,11 +16,14 @@ func reloadConfig(filename string) *ProxyConfig {
 	config := &ProxyConfig{}
 	buff, err := os.ReadFile(filename)
 	if err != nil {
+		log.Println("Error opening config file")
 		log.Println(err)
 		return nil
 	}
+
 	err = json.Unmarshal(buff, config)
 	if err != nil {
+		log.Println("Error parsing config file")
 		log.Println(err)
 		return nil
 	}

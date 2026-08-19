@@ -15,7 +15,12 @@ func main() {
 	cache := new(sync.Map)    // cache
 	visitors := new(sync.Map) // rate limiter clearing
 	var currentConfig atomic.Pointer[ProxyConfig]
-	currentConfig.Store(reloadConfig(configPath))
+	cfg := reloadConfig(configPath)
+	if cfg == nil {
+		log.Fatal("cannot start: invalid or missing config.json")
+	}
+	currentConfig.Store(cfg)
+
 	var roundRobinCounter atomic.Uint64
 	var aliveBackends atomic.Pointer[[]*url.URL]
 	dummyHost := url.URL{
