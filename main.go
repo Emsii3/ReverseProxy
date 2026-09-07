@@ -21,6 +21,7 @@ func main() {
 	}
 	currentConfig.Store(cfg)
 
+	//load balancer setup
 	var roundRobinCounter atomic.Uint64
 	var aliveBackends atomic.Pointer[[]*url.URL]
 	dummyHost := url.URL{
@@ -30,9 +31,9 @@ func main() {
 
 	// start workers
 	go startConfigWatcher(configPath, &currentConfig)   // reload config every 5 seconds
-	go startVisitorCleaner(visitors)                    // rate limiter reset
+	go startVisitorCleaner(visitors)                    // rate limit reset
 	go startHealthCheck(&currentConfig, &aliveBackends) // check if services are alive
-	go startCacheCleaner(cache)                         // cache clearing
+	go startCacheCleaner(cache)                         // clear carche
 
 	proxy := httputil.NewSingleHostReverseProxy(&dummyHost) // this is fine only because director is choosing correct adress to sent requests to. This line is here only to create reverseproxy.
 	myDirector := customDirector{
@@ -49,6 +50,10 @@ func main() {
 
 	proxy.Director = myDirector.Direct
 	log.Println("Initialization successful")
-	http.Handle("/", checkHealth(rateLimit(cacheMiddleware(proxy, cache, &currentConfig), visitors, &currentConfig), &aliveBackends))
+	http.Handle("/", checkHealth(
+		rateLimit(
+			cacheMiddleware(proxy, cache, &currentConfig),
+			visitors, &currentConfig),
+		&aliveBackends))
 	http.ListenAndServe(":8081", nil)
 }
