@@ -29,6 +29,8 @@ func rateLimit(next http.Handler, visitors *sync.Map, config *atomic.Pointer[Pro
 		next.ServeHTTP(w, r)
 	})
 }
+
+
 func checkHealth(next http.Handler, aliveBackends *atomic.Pointer[[]*url.URL]) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		backends := aliveBackends.Load()
@@ -39,14 +41,19 @@ func checkHealth(next http.Handler, aliveBackends *atomic.Pointer[[]*url.URL]) h
 		next.ServeHTTP(w, r)
 	})
 }
+
+
 func cacheMiddleware(next http.Handler, cache *sync.Map, config *atomic.Pointer[ProxyConfig]) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		cfg := config.Load()
 		cacheable := cfg.CacheRules
+		
 		if allowCache, exists := cacheable[r.URL.Path]; !exists || !allowCache {
 			next.ServeHTTP(w, r)
 			return
 		}
+
+		
 		//cacheing
 		key := r.Method + ":" + r.URL.String()
 		if val, ok := cache.Load(key); ok == true {
@@ -54,11 +61,13 @@ func cacheMiddleware(next http.Handler, cache *sync.Map, config *atomic.Pointer[
 			for k, v := range entry.Headers {
 				w.Header()[k] = v
 			}
+			
 			w.WriteHeader(entry.StatusCode)
 			w.Write(entry.Body)
 			if time.Now().After(entry.ExpiresAt) {
 				cache.Delete(key)
 			}
+			
 			return
 		} else {
 			rr := newResponseRecorder(w)
@@ -69,6 +78,12 @@ func cacheMiddleware(next http.Handler, cache *sync.Map, config *atomic.Pointer[
 				Headers:    rr.Header().Clone(),
 				ExpiresAt:  time.Now().Add(time.Minute * 1),
 			}
+			// cache 2xx only.
+			if response.StatusCode < 200 || response.StatusCode >= 300 {
+				return
+			}
+
+
 			cache.Store(key, response)
 		}
 	})
