@@ -83,6 +83,10 @@ func cacheMiddleware(next http.Handler, cache *sync.Map, config *atomic.Pointer[
 				return
 			}
 
+			// dont cache if size > 5 mb
+			if len(response.Body) > 5*1024*1024 {
+				return
+			}
 
 			cache.Store(key, response)
 		}
