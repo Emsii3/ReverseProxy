@@ -66,7 +66,7 @@ func startVisitorCleaner(visitors *sync.Map) {
 }
 func startCacheCleaner(cache *sync.Map) {
 	for {
-		time.Sleep(time.Minute * 10)
+		time.Sleep(time.Second * 30)
 		cache.Range(func(k, v any) bool {
 			entry := v.(CachedResponse)
 			if time.Now().After(entry.ExpiresAt) {
