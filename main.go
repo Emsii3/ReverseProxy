@@ -2,11 +2,14 @@ package main
 
 import (
 	"log"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"sync"
 	"sync/atomic"
+
+	"golang.org/x/net/netutil"
 )
 
 func main() {
@@ -41,7 +44,7 @@ func main() {
 	go startVisitorCleaner(visitors)                    // rate limit reset
 	go startHealthCheck(&currentConfig, &aliveBackends) // check if services are alive
 	go startCacheCleaner(cache)                         // clear carche
-	go startSignalListener(srv, idleConnsClosed)       // listen for signals
+	go startSignalListener(srv, idleConnsClosed)        // listen for signals
 
 	proxy := httputil.NewSingleHostReverseProxy(&dummyHost) // this is fine only because director is choosing correct adress to sent requests to. This line is here only to create reverseproxy.
 	myDirector := customDirector{
@@ -64,8 +67,15 @@ func main() {
 			visitors, &currentConfig),
 		&aliveBackends))
 
+	//todo: add a way to configure this and maxidleconns through config.json
+	ln, err := net.Listen("tcp", srv.Addr)
+	if err != nil {
+		log.Fatalf("Error starting listener: %v", err)
+	}
 
-	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
+	ln = netutil.LimitListener(ln, 450)
+
+	if err := srv.Serve(ln); err != http.ErrServerClosed {
 		// Error starting or closing listener:
 		log.Fatalf("HTTP server ListenAndServe: %v", err)
 	}
