@@ -46,7 +46,10 @@ The proxy requires a `config.json` file in the root directory. This file is moni
     "/": true,
     "/test": true
   },
-  "rate_limit_max": 50
+  "rate_limit_max": 50,
+  "max_conns_per_host": 150,
+  "max_idle_conns_per_host": 150,
+  "max_client_conns": 450
 }
 ```
 
