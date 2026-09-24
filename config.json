@@ -1,8 +1,13 @@
-{
-  "backends": ["http://localhost:8080"],
-  "cache_rules": {
-    "/": true,
-    "/tasks": true
-  },
-  "rate_limit_max": 500000000
-}
+    {
+      "backends": [
+        "http://localhost:8080"
+      ],
+      "cache_rules": {
+        "/": true,
+        "/test": true
+      },
+      "rate_limit_max": 5000000,
+      "max_conns_per_host": 150,
+      "max_idle_conns_per_host": 150,
+      "max_client_conns": 450
+    }
