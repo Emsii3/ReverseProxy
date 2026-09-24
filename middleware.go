@@ -9,6 +9,21 @@ import (
 	"time"
 )
 
+func limitClientConnections(next http.Handler, inFlight *atomic.Int64, config *atomic.Pointer[ProxyConfig]) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		cfg := config.Load()
+		current := inFlight.Add(1)
+		defer inFlight.Add(-1)
+
+		if int(current) > cfg.MaxClientConns {
+			http.Error(w, "Service Unavailable (Server Overloaded)", http.StatusServiceUnavailable)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
 func rateLimit(next http.Handler, visitors *sync.Map, config *atomic.Pointer[ProxyConfig]) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		cfg := config.Load()

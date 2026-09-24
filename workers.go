@@ -42,7 +42,7 @@ func startHealthCheck(currentConfig *atomic.Pointer[ProxyConfig], aliveBackends 
 	}
 }
 
-func startConfigWatcher(configPath string, currentConfig *atomic.Pointer[ProxyConfig]) {
+func startConfigWatcher(configPath string, currentConfig *atomic.Pointer[ProxyConfig], dynamicTransport *DynamicTransport) {
 	fileinfo, _ := os.Stat(configPath)
 	lastMod := fileinfo.ModTime()
 	for {
@@ -52,6 +52,9 @@ func startConfigWatcher(configPath string, currentConfig *atomic.Pointer[ProxyCo
 			config := reloadConfig(configPath)
 			if config != nil && len(config.Backends) > 0 {
 				currentConfig.Store(config)
+				if dynamicTransport != nil {
+					dynamicTransport.current.Store(createTransport(config))
+				}
 				lastMod = fileinfo.ModTime()
 			}
 

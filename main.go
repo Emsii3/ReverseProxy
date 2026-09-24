@@ -2,15 +2,27 @@ package main
 
 import (
 	"log"
-	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"sync"
 	"sync/atomic"
-
-	"golang.org/x/net/netutil"
 )
+
+type DynamicTransport struct {
+	current atomic.Pointer[http.Transport]
+}
+
+func (d *DynamicTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	return d.current.Load().RoundTrip(req)
+}
+
+func createTransport(cfg *ProxyConfig) *http.Transport {
+	t := http.DefaultTransport.(*http.Transport).Clone()
+	t.MaxConnsPerHost = cfg.MaxConnsPerHost
+	t.MaxIdleConnsPerHost = cfg.MaxIdleConnsPerHost
+	return t
+}
 
 func main() {
 	// program initialization
@@ -23,6 +35,10 @@ func main() {
 		log.Fatal("cannot start: invalid or missing config.json")
 	}
 	currentConfig.Store(cfg)
+
+	var inFlight atomic.Int64
+	var dynamicTransport DynamicTransport
+	dynamicTransport.current.Store(createTransport(cfg))
 
 	srv := &http.Server{
 		Addr:    ":8081",
@@ -40,11 +56,11 @@ func main() {
 	}
 
 	// start workers
-	go startConfigWatcher(configPath, &currentConfig)   // reload config every 5 seconds
-	go startVisitorCleaner(visitors)                    // rate limit reset
-	go startHealthCheck(&currentConfig, &aliveBackends) // check if services are alive
-	go startCacheCleaner(cache)                         // clear carche
-	go startSignalListener(srv, idleConnsClosed)        // listen for signals
+	go startConfigWatcher(configPath, &currentConfig, &dynamicTransport) // reload config every 5 seconds
+	go startVisitorCleaner(visitors)                                   // rate limit reset
+	go startHealthCheck(&currentConfig, &aliveBackends)                // check if services are alive
+	go startCacheCleaner(cache)                                        // clear carche
+	go startSignalListener(srv, idleConnsClosed)                       // listen for signals
 
 	proxy := httputil.NewSingleHostReverseProxy(&dummyHost) // this is fine only because director is choosing correct adress to sent requests to. This line is here only to create reverseproxy.
 	myDirector := customDirector{
@@ -53,29 +69,20 @@ func main() {
 		aliveBackends:    &aliveBackends,
 	}
 
-	myTransport := http.DefaultTransport.(*http.Transport).Clone()
-	myTransport.MaxConnsPerHost = 150
-	myTransport.MaxIdleConnsPerHost = 150
-
-	proxy.Transport = myTransport
-
+	proxy.Transport = &dynamicTransport
 	proxy.Director = myDirector.Direct
 	log.Println("Initialization successful")
-	http.Handle("/", checkHealth(
-		rateLimit(
-			cacheMiddleware(proxy, cache, &currentConfig),
-			visitors, &currentConfig),
-		&aliveBackends))
 
-	//todo: add a way to configure this and maxidleconns through config.json
-	ln, err := net.Listen("tcp", srv.Addr)
-	if err != nil {
-		log.Fatalf("Error starting listener: %v", err)
-	}
+	http.Handle("/", limitClientConnections(
+		checkHealth(
+			rateLimit(
+				cacheMiddleware(proxy, cache, &currentConfig),
+				visitors, &currentConfig),
+			&aliveBackends),
+		&inFlight,
+		&currentConfig))
 
-	ln = netutil.LimitListener(ln, 450)
-
-	if err := srv.Serve(ln); err != http.ErrServerClosed {
+	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
 		// Error starting or closing listener:
 		log.Fatalf("HTTP server ListenAndServe: %v", err)
 	}

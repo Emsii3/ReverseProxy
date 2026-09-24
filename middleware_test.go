@@ -187,3 +187,41 @@ func TestCacheMiddleware_ExpiredEntryDeleted(t *testing.T) {
 		t.Fatal("expired entry should be deleted after being served")
 	}
 }
+
+// limitClientConnections
+
+func TestLimitClientConnections_UnderLimit(t *testing.T) {
+	var inFlight atomic.Int64
+	ptr := &atomic.Pointer[ProxyConfig]{}
+	ptr.Store(&ProxyConfig{MaxClientConns: 5})
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rr := httptest.NewRecorder()
+
+	limitClientConnections(okHandler(), &inFlight, ptr).ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	if inFlight.Load() != 0 {
+		t.Fatalf("expected inFlight 0 after request, got %d", inFlight.Load())
+	}
+}
+
+func TestLimitClientConnections_OverLimit(t *testing.T) {
+	var inFlight atomic.Int64
+	ptr := &atomic.Pointer[ProxyConfig]{}
+	ptr.Store(&ProxyConfig{MaxClientConns: 1})
+
+	// Pre-set in-flight connections to 1
+	inFlight.Store(1)
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rr := httptest.NewRecorder()
+
+	limitClientConnections(okHandler(), &inFlight, ptr).ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d", rr.Code)
+	}
+}
