@@ -42,4 +42,5 @@ func (c *customDirector) Direct(req *http.Request) {
 	req.URL.Scheme = target.Scheme
 	req.Host = target.Host
 	req.URL.Host = target.Host
+	req.Host = target.Host
 }
