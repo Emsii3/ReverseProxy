@@ -89,20 +89,19 @@ func cacheMiddleware(next http.Handler, cache *sync.Map, config *atomic.Pointer[
 			rr := newResponseRecorder(w)
 			next.ServeHTTP(rr, r)
 			
+			if rr.statusCode < 200 || rr.statusCode >= 300 {
+				return
+			}
+
+			if rr.buffer.Len() > 5*1024*1024 {
+				return
+			}
+
 			response := CachedResponse{
 				StatusCode: rr.statusCode,
 				Body:       rr.buffer.Bytes(),
 				Headers:    rr.Header().Clone(),
 				ExpiresAt:  time.Now().Add(time.Minute * 1),
-			}
-			// cache 2xx only.
-			if response.StatusCode < 200 || response.StatusCode >= 300 {
-				return
-			}
-
-			// dont cache if size > 5 mb
-			if len(response.Body) > 5*1024*1024 {
-				return
 			}
 
 			cache.Store(key, response)

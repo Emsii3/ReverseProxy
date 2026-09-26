@@ -23,6 +23,9 @@ This project was created for educational purposes as a deep dive into distribute
 * Configurable caching middleware with TTL (Time-To-Live) expiration.
 * Drastically reduces backend load by serving frequent identical requests straight from RAM.
 
+### Graceful Shutdown
+* Listens for termination signals (`SIGINT`, `SIGTERM`) to cleanly finish in-flight requests and shut down the HTTP server without dropping active connections.
+
 ## Technologies
 
 * **Go (Golang)** - The core programming language.
