@@ -85,14 +85,15 @@ func NewProxyApp(cfg *ProxyConfig) *ProxyApp {
 	proxy.ErrorHandler = proxyErrorHandler
 
 	mux := http.NewServeMux()
-	mux.Handle("/", limitClientConnections(
-		checkHealth(
-			rateLimit(
-				cacheMiddleware(proxy, app.Cache, &app.Config),
-				app.Visitors, &app.Config),
-			&app.AliveBackends),
-		&app.InFlight,
-		&app.Config))
+	mux.Handle("/", recoveryMiddleware(
+		limitClientConnections(
+			checkHealth(
+				rateLimit(
+					cacheMiddleware(proxy, app.Cache, &app.Config),
+					app.Visitors, &app.Config),
+				&app.AliveBackends),
+			&app.InFlight,
+			&app.Config)))
 
 	app.Handler = mux
 

@@ -343,3 +343,32 @@ func TestLimitClientConnections_OverLimit(t *testing.T) {
 		t.Fatalf("expected 503, got %d", rr.Code)
 	}
 }
+
+// recoveryMiddleware
+
+func TestRecoveryMiddleware_RecoversPanic(t *testing.T) {
+	panickingHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		panic("simulated fatal crash in handler")
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/crash", nil)
+	rr := httptest.NewRecorder()
+
+	recoveryMiddleware(panickingHandler).ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500 Internal Server Error, got %d", rr.Code)
+	}
+}
+
+func TestRecoveryMiddleware_NormalPassThrough(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/ok", nil)
+	rr := httptest.NewRecorder()
+
+	recoveryMiddleware(okHandler()).ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d", rr.Code)
+	}
+}
+
