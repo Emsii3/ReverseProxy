@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -26,6 +27,7 @@ func startHealthCheck(currentConfig *atomic.Pointer[ProxyConfig], aliveBackends 
 				if err != nil {
 					continue
 				}
+				io.Copy(io.Discard, body.Body)
 				body.Body.Close()
 				if body.StatusCode < 200 || body.StatusCode > 299 {
 					continue

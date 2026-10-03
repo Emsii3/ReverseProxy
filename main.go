@@ -42,12 +42,12 @@ func main() {
 	dynamicTransport.current.Store(createTransport(cfg))
 
 	srv := &http.Server{
-		Addr:    ":8081",
-		Handler: http.DefaultServeMux,
-		ReadHeaderTimeout: 5*time.Second,
-		ReadTimeout: 15*time.Second
-		WriteTimeout: 15*time.Second,
-		IdleTimeout: 60*time.Second,
+		Addr:              ":8081",
+		Handler:           http.DefaultServeMux,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      15 * time.Second,
+		IdleTimeout:       60 * time.Second,
 	}
 
 	idleConnsClosed := make(chan struct{}) // graceful shutdown init
@@ -62,10 +62,10 @@ func main() {
 
 	// start workers
 	go startConfigWatcher(configPath, &currentConfig, &dynamicTransport) // reload config every 5 seconds
-	go startVisitorCleaner(visitors)                                   // rate limit reset
-	go startHealthCheck(&currentConfig, &aliveBackends)                // check if services are alive
-	go startCacheCleaner(cache)                                        // clear carche
-	go startSignalListener(srv, idleConnsClosed)                       // listen for signals
+	go startVisitorCleaner(visitors)                                     // rate limit reset
+	go startHealthCheck(&currentConfig, &aliveBackends)                  // check if services are alive
+	go startCacheCleaner(cache)                                          // clear carche
+	go startSignalListener(srv, idleConnsClosed)                         // listen for signals
 
 	proxy := httputil.NewSingleHostReverseProxy(&dummyHost) // this is fine only because director is choosing correct adress to sent requests to. This line is here only to create reverseproxy.
 	myDirector := customDirector{
