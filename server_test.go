@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -207,3 +209,53 @@ func TestProxyApp_EndToEnd_ConnectionLimit(t *testing.T) {
 		t.Fatalf("expected status 503 Service Unavailable, got %d", rr.Code)
 	}
 }
+
+func TestProxyErrorHandler(t *testing.T) {
+	testCases := []struct {
+		name         string
+		err          error
+		expectedCode int
+	}{
+		{
+			name:         "deadline exceeded",
+			err:          context.DeadlineExceeded,
+			expectedCode: http.StatusGatewayTimeout,
+		},
+		{
+			name:         "context canceled",
+			err:          context.Canceled,
+			expectedCode: http.StatusBadGateway,
+		},
+		{
+			name:         "upstream connection error",
+			err:          errors.New("dial tcp: connection refused"),
+			expectedCode: http.StatusBadGateway,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/test", nil)
+			rr := httptest.NewRecorder()
+
+			proxyErrorHandler(rr, req, tc.err)
+
+			if rr.Code != tc.expectedCode {
+				t.Fatalf("expected status %d, got %d", tc.expectedCode, rr.Code)
+			}
+		})
+	}
+}
+
+func TestProxyApp_StartAndStopWorkers(t *testing.T) {
+	cfg := &ProxyConfig{
+		Backends: []string{"http://localhost:8080"},
+	}
+	app := NewProxyApp(cfg)
+	app.StartWorkers("nonexistent.json")
+
+	time.Sleep(20 * time.Millisecond)
+	app.StopWorkers()
+}
+
+
