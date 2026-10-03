@@ -188,6 +188,124 @@ func TestCacheMiddleware_ExpiredEntryDeleted(t *testing.T) {
 	}
 }
 
+func TestCacheMiddleware_NonGetOrHeadMethodsNotCached(t *testing.T) {
+	methods := []string{
+		http.MethodPost,
+		http.MethodPut,
+		http.MethodDelete,
+		http.MethodPatch,
+	}
+
+	for _, method := range methods {
+		t.Run(method, func(t *testing.T) {
+			cache := new(sync.Map)
+			config := makeConfig(0, map[string]bool{"/cached": true})
+
+			called := false
+			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				called = true
+				w.WriteHeader(http.StatusOK)
+				w.Write([]byte("response"))
+			})
+
+			req := httptest.NewRequest(method, "/cached", nil)
+			rr := httptest.NewRecorder()
+			cacheMiddleware(handler, cache, config).ServeHTTP(rr, req)
+
+			if !called {
+				t.Fatalf("expected handler to be called for %s", method)
+			}
+			if rr.Code != http.StatusOK {
+				t.Fatalf("expected status 200, got %d", rr.Code)
+			}
+			key := method + ":/cached"
+			if _, ok := cache.Load(key); ok {
+				t.Fatalf("method %s should not be stored in cache", method)
+			}
+		})
+	}
+}
+
+func TestCacheMiddleware_HeadMethodCached(t *testing.T) {
+	cache := new(sync.Map)
+	config := makeConfig(0, map[string]bool{"/cached": true})
+
+	called := 0
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called++
+		w.WriteHeader(http.StatusOK)
+	})
+
+	for i := 0; i < 2; i++ {
+		req := httptest.NewRequest(http.MethodHead, "/cached", nil)
+		rr := httptest.NewRecorder()
+		cacheMiddleware(handler, cache, config).ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("expected status 200, got %d", rr.Code)
+		}
+	}
+
+	if called != 1 {
+		t.Fatalf("HEAD request should be cached on second call, backend called %d times", called)
+	}
+}
+
+func TestCacheMiddleware_Non2xxStatusCodeNotCached(t *testing.T) {
+	statusCodes := []int{
+		http.StatusMovedPermanently,
+		http.StatusBadRequest,
+		http.StatusNotFound,
+		http.StatusInternalServerError,
+		http.StatusBadGateway,
+	}
+
+	for _, code := range statusCodes {
+		t.Run(http.StatusText(code), func(t *testing.T) {
+			cache := new(sync.Map)
+			config := makeConfig(0, map[string]bool{"/cached": true})
+
+			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(code)
+				w.Write([]byte("error response"))
+			})
+
+			req := httptest.NewRequest(http.MethodGet, "/cached", nil)
+			rr := httptest.NewRecorder()
+			cacheMiddleware(handler, cache, config).ServeHTTP(rr, req)
+
+			if rr.Code != code {
+				t.Fatalf("expected status %d, got %d", code, rr.Code)
+			}
+			if _, ok := cache.Load("GET:/cached"); ok {
+				t.Fatalf("status %d should not be stored in cache", code)
+			}
+		})
+	}
+}
+
+func TestCacheMiddleware_LargePayloadOver5MBNotCached(t *testing.T) {
+	cache := new(sync.Map)
+	config := makeConfig(0, map[string]bool{"/cached": true})
+
+	largePayload := make([]byte, 5*1024*1024+1) // 5MB + 1 byte
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write(largePayload)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/cached", nil)
+	rr := httptest.NewRecorder()
+	cacheMiddleware(handler, cache, config).ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rr.Code)
+	}
+	if _, ok := cache.Load("GET:/cached"); ok {
+		t.Fatal("response over 5MB should not be stored in cache")
+	}
+}
+
 // limitClientConnections
 
 func TestLimitClientConnections_UnderLimit(t *testing.T) {
