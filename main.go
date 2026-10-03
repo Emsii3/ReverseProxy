@@ -22,5 +22,6 @@ func main() {
 	}
 
 	<-app.IdleConnsClosed
+	app.StopWorkers()
 	log.Println("Shutdown successful. Quiting program")
 }

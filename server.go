@@ -1,6 +1,9 @@
 package main
 
 import (
+	"context"
+	"errors"
+	"log"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -24,6 +27,20 @@ func createTransport(cfg *ProxyConfig) *http.Transport {
 	return t
 }
 
+func proxyErrorHandler(w http.ResponseWriter, r *http.Request, err error) {
+	log.Printf("Proxy error for %s %s: %v", r.Method, r.URL.Path, err)
+
+	if errors.Is(err, context.DeadlineExceeded) {
+		http.Error(w, "Gateway Timeout: upstream server took too long to respond", http.StatusGatewayTimeout)
+		return
+	}
+	if errors.Is(err, context.Canceled) {
+		http.Error(w, "Bad Gateway: request canceled or no upstream available", http.StatusBadGateway)
+		return
+	}
+	http.Error(w, "Bad Gateway: upstream connection failed", http.StatusBadGateway)
+}
+
 type ProxyApp struct {
 	Config            atomic.Pointer[ProxyConfig]
 	AliveBackends     atomic.Pointer[[]*url.URL]
@@ -32,6 +49,7 @@ type ProxyApp struct {
 	Cache             *sync.Map
 	Visitors          *sync.Map
 	DynamicTransport  *DynamicTransport
+	WorkerManager     *WorkerManager
 	Handler           http.Handler
 	Server            *http.Server
 	IdleConnsClosed   chan struct{}
@@ -41,6 +59,7 @@ func NewProxyApp(cfg *ProxyConfig) *ProxyApp {
 	app := &ProxyApp{
 		Cache:           new(sync.Map),
 		Visitors:        new(sync.Map),
+		WorkerManager:   NewWorkerManager(),
 		IdleConnsClosed: make(chan struct{}),
 	}
 	app.Config.Store(cfg)
@@ -63,6 +82,7 @@ func NewProxyApp(cfg *ProxyConfig) *ProxyApp {
 
 	proxy.Transport = app.DynamicTransport
 	proxy.Director = myDirector.Direct
+	proxy.ErrorHandler = proxyErrorHandler
 
 	mux := http.NewServeMux()
 	mux.Handle("/", limitClientConnections(
@@ -89,9 +109,17 @@ func NewProxyApp(cfg *ProxyConfig) *ProxyApp {
 }
 
 func (app *ProxyApp) StartWorkers(configPath string) {
-	go startConfigWatcher(configPath, &app.Config, app.DynamicTransport)
-	go startVisitorCleaner(app.Visitors)
-	go startHealthCheck(&app.Config, &app.AliveBackends)
-	go startCacheCleaner(app.Cache)
+	app.WorkerManager.StartWorkers(
+		configPath,
+		&app.Config,
+		&app.AliveBackends,
+		app.DynamicTransport,
+		app.Visitors,
+		app.Cache,
+	)
 	go startSignalListener(app.Server, app.IdleConnsClosed)
+}
+
+func (app *ProxyApp) StopWorkers() {
+	app.WorkerManager.StopWorkers()
 }
