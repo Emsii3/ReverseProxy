@@ -72,16 +72,16 @@ Below are the benchmark results executed on an **Apple M5 (ARM64)** processor:
 
 | Component / Scenario | Time per Operation | Memory Allocated | Allocs / Op |
 | :--- | :--- | :--- | :--- |
-| **Health Check** (Active Backend) | 605.7 ns/op | 5370 B/op | 15 |
-| **Rate Limiter** (Under Limit) | 640.8 ns/op | 5402 B/op | 17 |
-| **Rate Limiter** (Heavy IP Rotation) | 1347.0 ns/op | 5521 B/op | 19 |
-| **Cache** (Miss - Write to RAM) | 847.0 ns/op | 5946 B/op | 26 |
-| **Cache** (Hit - Read from RAM) | 704.1 ns/op | 5418 B/op | 16 |
-| **Cache** (Hit - Parallel Execution) | 854.7 ns/op | 5418 B/op | 16 |
-| **Cache** (Non-Cacheable Path) | 631.3 ns/op | 5380 B/op | 15 |
-| **Cache** (Expired Entry Cleanup) | 862.0 ns/op | 5786 B/op | 22 |
-| **Full Chain** (Cache Hit) | 904.6 ns/op | 5442 B/op | 18 |
-| **Full Chain** (Cache Miss) | 945.9 ns/op | 6074 B/op | 30 |
-| **Hot Reload** (JSON Parsing & Swap) | 9320.0 ns/op | 1880 B/op | 22 |
+| **Health Check** (Active Backend) | 614.4 ns/op | 5370 B/op | 15 |
+| **Rate Limiter** (Under Limit) | 651.1 ns/op | 5402 B/op | 17 |
+| **Rate Limiter** (Heavy IP Rotation) | 1363.0 ns/op | 5521 B/op | 19 |
+| **Cache** (Miss - Write to RAM) | 859.2 ns/op | 5946 B/op | 26 |
+| **Cache** (Hit - Read from RAM) | 714.2 ns/op | 5418 B/op | 16 |
+| **Cache** (Hit - Parallel Execution) | 823.8 ns/op | 5418 B/op | 16 |
+| **Cache** (Non-Cacheable Path) | 638.3 ns/op | 5380 B/op | 15 |
+| **Cache** (Expired Entry Cleanup) | 858.9 ns/op | 5786 B/op | 22 |
+| **Full Chain** (Cache Hit) | 862.6 ns/op | 5442 B/op | 18 |
+| **Full Chain** (Cache Miss) | 941.0 ns/op | 6074 B/op | 30 |
+| **Hot Reload** (JSON Parsing & Swap) | 9793.0 ns/op | 1576 B/op | 19 |
 
 *Note: The entire request lifecycle (Full Chain) executes in less than 1 microsecond per operation, proving the efficiency of the lock-free state management architecture.*
