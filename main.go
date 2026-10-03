@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 type DynamicTransport struct {
@@ -43,6 +44,10 @@ func main() {
 	srv := &http.Server{
 		Addr:    ":8081",
 		Handler: http.DefaultServeMux,
+		ReadHeaderTimeout: 5*time.Second,
+		ReadTimeout: 15*time.Second
+		WriteTimeout: 15*time.Second,
+		IdleTimeout: 60*time.Second,
 	}
 
 	idleConnsClosed := make(chan struct{}) // graceful shutdown init
