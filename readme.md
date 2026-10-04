@@ -15,16 +15,26 @@ This project was created for educational purposes as a deep dive into distribute
 ### Active Asynchronous Health Checks
 * A dedicated background worker constantly pings backend servers.
 * Automatically removes unresponsive servers from the active routing pool and seamlessly reintroduces them once they recover.
+* Drains response bodies to enable TCP connection reuse (HTTP Keep-Alive).
 
 ### IP-based Rate Limiting
 * Built-in, thread-safe rate limiter utilizing `sync.Map` to protect backend services from HTTP floods and basic DDoS attacks.
 
 ### In-Memory Caching
 * Configurable caching middleware with TTL (Time-To-Live) expiration.
+* Restricts caching to idempotent `GET`/`HEAD` requests and `2xx` status codes with a 5 MB payload ceiling.
 * Drastically reduces backend load by serving frequent identical requests straight from RAM.
 
-### Graceful Shutdown
+### Panic Recovery Middleware
+* Catches unexpected runtime panics across all handlers and middleware using `recover()` and detailed stack trace logging, preventing server crashes and returning clean `HTTP 500 Internal Server Error` responses.
+
+### Custom Upstream Error Handling & Slowloris Defense
+* Configured server timeouts (`ReadHeaderTimeout: 5s`, `ReadTimeout: 15s`, `WriteTimeout: 15s`, `IdleTimeout: 60s`) mitigating Slowloris and stalled connection attacks.
+* Custom `proxy.ErrorHandler` distinguishing between upstream timeouts (`HTTP 504 Gateway Timeout`) and connection failures (`HTTP 502 Bad Gateway`).
+
+### Graceful Shutdown & Clean Worker Lifecycle
 * Listens for termination signals (`SIGINT`, `SIGTERM`) to cleanly finish in-flight requests and shut down the HTTP server without dropping active connections.
+* Coordinates background workers using `context.Context` and `sync.WaitGroup`, guaranteeing zero goroutine leaks on shutdown.
 
 ## Technologies
 
@@ -85,3 +95,22 @@ Below are the benchmark results executed on an **Apple M5 (ARM64)** processor:
 | **Hot Reload** (JSON Parsing & Swap) | 9793.0 ns/op | 1576 B/op | 19 |
 
 *Note: The entire request lifecycle (Full Chain) executes in less than 1 microsecond per operation, proving the efficiency of the lock-free state management architecture.*
+
+## Testing & Reliability
+
+The codebase features comprehensive unit, middleware, and end-to-end integration tests with **87.4% statement coverage**, verified against race conditions with Go's race detector:
+
+```bash
+go test -v -race ./...
+```
+
+## Future Improvements (Roadmap v2.0)
+
+Planned architectural enhancements for enterprise-scale deployments:
+
+* **Configurable Health Check Path & Method:** Supporting dynamic endpoints (e.g., `health_check_path: "/healthz"` or lightweight `HEAD /`) configured per backend instead of the fixed `/test` route.
+* **Zero-Allocation Buffer Pooling (`sync.Pool`):** Reusing `bytes.Buffer` instances to eliminate allocation overhead during response capture.
+* **Streaming & Backpressure:** Forwarding large chunked responses in real time without buffering entire payloads in RAM.
+* **Prometheus Metrics & Observability:** Exposing a `/metrics` endpoint for latency percentiles (p50/p95/p99), error rates, and cache hit ratios.
+* **LRU Cache Eviction Policy:** Evicting stale keys based on memory limits rather than relying solely on TTL.
+* **TLS / HTTPS Termination:** Native SSL/TLS handling and automatic ACME/Let's Encrypt certificate renewal.
